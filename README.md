@@ -12,8 +12,6 @@ This repository consists of Tekton pipelines for the installation of OSDU (Open 
 These parameters are passed to each task to provide flexibility:
 
 - `ansible_image` Docker image containing the Ansible installer.
-- `cluster_url` OpenShift cluster API endpoint.
-- `username & password` OpenShift login credentials.
 - `partition_admin_password` Password for partition administrator.
 - `proj_name & cpd_proj_name` Namespaces for resources.
 - `router_certs` Router certificate name.
@@ -91,19 +89,7 @@ oc create -f pipelines/osdu-pipeline-embedded-task-deployer.yaml
 To run the pipeline, use the below command and replace all the parameters according to the environment.
 
 ```
-oc create pipelinerun smoke-test-run \
-  --generate-name \
-  --namespace cpd \
-  --pipeline smoke-test-pipeline \
-  --serviceaccount pipeline \
-  --param ansible_image=image-registry.openshift-image-registry.svc:5000/cpd/ansible-installer:latest \
-  --param cluster_url=https://api.ocp4.example.com:6443 \
-  --param username=kubeadmin \
-  --param password=your-password \
-  --param proj_name=project-name \
-  --param cpd_proj_name=cpd-project-name \
-  --param partition_admin_password=partition-password \
-  --param router_certs=router-certs
+oc create -f pipelines/pipelineRun.yaml
 ```
 
 
@@ -114,9 +100,6 @@ oc create pipelinerun smoke-test-run \
 | Parameter Name            | Default Value                                                     | Type    | Description                                    |
 |---------------------------|-------------------------------------------------------------------|---------|------------------------------------------------|
 | `ansible_image`            | `849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone` | string  | Image used for running Ansible playbooks.      |
-| `cluster_url`              | `https://api.673d63fde65b8f527033101d.ocp.techzone.ibm.com:6443` | string  | OpenShift cluster API URL.                    |
-| `username`                 | `CLUSTER_ADMIN_USERNAME`                                                     | string  | OpenShift cluster admin username.             |
-| `password`                 | `YOUR_PASSWORD`                                       | string  | OpenShift cluster admin password.             |
 | `partition_admin_password` | `partition_password`                                              | string  | Password for partition admin.                 |
 | `proj_name`                | `cpd`                                                           | string  | Project name in OpenShift.                    |
 | `cpd_proj_name`            | `cpd-operators`                                                 | string  | CPD project name in OpenShift.                |
