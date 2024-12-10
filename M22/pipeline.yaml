@@ -1,0 +1,405 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: osdu-ansible-installer
+  namespace: default
+spec:
+  params:
+  - default: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone
+    name: ansible_image
+    type: string
+  - default: KQb49EqxpuXhNG-f
+    name: partition_admin_password
+    type: string
+  - default: cpd
+    name: proj_name
+    type: string
+  - default: cpd-operators
+    name: cpd_proj_name
+    type: string
+  - default: letsencrypt-certs
+    name: router_certs
+    type: string
+  tasks:
+  - name: import-image-to-registry
+    params:
+    - name: ansible_image
+      value: $(params.ansible_image)
+    - name: proj_name
+      value: $(params.proj_name)
+    taskSpec:
+      params:
+      - name: ansible_image
+        type: string
+      - name: proj_name
+        type: string
+      spec: null
+      steps:
+      - image: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone
+        name: import-image
+        script: |
+          #!/bin/bash
+          set -e
+          set -x
+          echo "Logging into OpenShift..."
+          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          oc login --token=$TOKEN
+
+          echo "Checking if ImageStream exists..."
+          if ! oc get imagestream ansible-installer -n default &>/dev/null; then
+            echo "ImageStream does not exist. Creating it..."
+            oc create imagestream ansible-installer -n default
+            echo "Importing the image into the OpenShift registry..."
+            oc tag --source=docker "$(params.ansible_image)" default/ansible-installer:latest
+          else
+            echo "ImageStream already exists."
+          fi
+  - name: run-ansible-playbook
+    params:
+    - name: ansible_image
+      value: $(params.ansible_image)
+    - name: proj_name
+      value: $(params.proj_name)
+    - name: cpd_proj_name
+      value: $(params.cpd_proj_name)
+    - name: partition_admin_password
+      value: $(params.partition_admin_password)
+    - name: router_certs
+      value: $(params.router_certs)
+    retries: 4
+    runAfter:
+    - import-image-to-registry
+    taskSpec:
+      params:
+      - name: proj_name
+        type: string
+      - name: cpd_proj_name
+        type: string
+      - name: router_certs
+        type: string
+      - name: partition_admin_password
+        type: string
+      - name: ansible_image
+        type: string
+      spec: null
+      steps:
+      - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
+        name: run-ansible-playbook
+        script: |
+          #!/bin/bash
+          set -e
+
+          # Injecting Environment Variables from the pipeline parameters
+          echo "Injecting Environment variables"
+
+          cat <<EOF > /tmp/osdu_vars.sh
+          export PARTITON_PASSWORD="$(params.partition_admin_password)"
+          export PROJECT_NAME="$(params.proj_name)"
+          export CPD_PROJECT_NAME="$(params.cpd_proj_name)"
+          export ROUTER_CERT_NAME="$(params.router_certs)"
+          EOF
+
+          # Sourcing Environmental Variables
+          echo "Sourcing Environmental Variables"
+          chmod +x /tmp/osdu_vars.sh
+          source /tmp/osdu_vars.sh
+
+          # Updating the values of the odi-vars.yaml file with the environmental variables using sed
+          echo "Injecting environment variables into odi-vars.yaml"
+          sed -i \
+              -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
+              -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
+              -e "s|\$CPD_PROJECT_NAME|${CPD_PROJECT_NAME}|g" \
+              -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
+              /playbooks/vars/odi-vars.yaml
+
+          # Verification of the odi-vars.yaml file values
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Displaying the odi-vars.yaml values"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+          cat /playbooks/vars/odi-vars.yaml
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+
+          # Logging into OpenShift
+          echo "Logging into OpenShift..."
+
+          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          oc login --token=$TOKEN
+
+
+          # Executing Ansible scripts for pre-req and osdu operator installation
+          echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Installation of pre-req and osdu operators are started. Wait for 30 mins"
+          echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+          ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/pre-install.yml --extra-vars "@/playbooks/vars/odi-vars.yaml"
+        volumeMounts:
+        - mountPath: /workspace/source/odi-install
+          name: odi-volume
+        workingDir: /workspace/source
+      volumes:
+      - name: odi-volume
+      workspaces:
+      - name: source
+    workspaces:
+    - name: source
+      workspace: source
+  - name: post-install
+    params:
+    - name: ansible_image
+      value: $(params.ansible_image)
+    - name: proj_name
+      value: $(params.proj_name)
+    - name: cpd_proj_name
+      value: $(params.cpd_proj_name)
+    - name: partition_admin_password
+      value: $(params.partition_admin_password)
+    - name: router_certs
+      value: $(params.router_certs)
+    retries: 4
+    runAfter:
+    - run-ansible-playbook
+    taskSpec:
+      params:
+      - name: proj_name
+        type: string
+      - name: cpd_proj_name
+        type: string
+      - name: router_certs
+        type: string
+      - name: partition_admin_password
+        type: string
+      spec: null
+      steps:
+      - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
+        name: post-install
+        script: |
+          #!/bin/bash
+          set -e
+          # Injecting Environment Variables from the pipeline parameters
+          echo "Injecting Environment variables"
+
+          cat <<EOF > /tmp/osdu_vars.sh
+          export PARTITON_PASSWORD="$(params.partition_admin_password)"
+          export PROJECT_NAME="$(params.proj_name)"
+          export CPD_PROJECT_NAME="$(params.cpd_proj_name)"
+          export ROUTER_CERT_NAME="$(params.router_certs)"
+          EOF
+
+          # Sourcing Environmental Variables
+          echo "Sourcing Environmental Variables"
+          chmod +x /tmp/osdu_vars.sh
+          source /tmp/osdu_vars.sh
+
+          # Updating the values of the odi-vars.yaml file with the environmental variables using sed
+          echo "Injecting environment variables into odi-vars.yaml"
+          sed -i \
+              -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
+              -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
+              -e "s|\$CPD_PROJECT_NAME|${CPD_PROJECT_NAME}|g" \
+              -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
+              /playbooks/vars/odi-vars.yaml
+
+          # Verification of the odi-vars.yaml file values
+          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Displaying the odi-vars.yaml values"
+          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          cat /playbooks/vars/odi-vars.yaml
+          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          # Logging into OpenShift
+          echo "Logging into OpenShift..."
+          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          oc login --token=$TOKEN
+
+          # Executing Ansible scripts for pre-req and osdu operator installation
+          echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Post Installation Started. Wait for 30 mins"
+          echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+
+          ansible-playbook /playbooks/odi-install/post-install.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
+        volumeMounts:
+        - mountPath: /workspace/source/odi-install
+          name: odi-volume
+        workingDir: /workspace/source
+      volumes:
+      - name: odi-volume
+      workspaces:
+      - name: source
+    workspaces:
+    - name: source
+      workspace: source
+  - name: sanity-test
+    params:
+    - name: ansible_image
+      value: $(params.ansible_image)
+    - name: proj_name
+      value: $(params.proj_name)
+    - name: cpd_proj_name
+      value: $(params.cpd_proj_name)
+    - name: partition_admin_password
+      value: $(params.partition_admin_password)
+    - name: router_certs
+      value: $(params.router_certs)
+    retries: 4
+    runAfter:
+    - post-install
+    taskSpec:
+      params:
+      - name: proj_name
+        type: string
+      - name: cpd_proj_name
+        type: string
+      - name: router_certs
+        type: string
+      - name: partition_admin_password
+        type: string
+      - name: ansible_image
+        type: string
+      spec: null
+      steps:
+      - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
+        name: sanity-test
+        script: |
+          #!/bin/bash
+
+          set -e
+          # Injecting Environment Variables from the pipeline parameters
+          echo "Injecting Environment variables"
+
+          cat <<EOF > /tmp/osdu_vars.sh
+          export PARTITON_PASSWORD="$(params.partition_admin_password)"
+          export PROJECT_NAME="$(params.proj_name)"
+          export CPD_PROJECT_NAME="$(params.cpd_proj_name)"
+          export ROUTER_CERT_NAME="$(params.router_certs)"
+          EOF
+
+          # Sourcing Environmental Variables
+          echo "Sourcing Environmental Variables"
+          chmod +x /tmp/osdu_vars.sh
+          source /tmp/osdu_vars.sh
+
+          # Updating the values of the odi-vars.yaml file with the environmental variables using sed
+          echo "Injecting environment variables into odi-vars.yaml"
+          sed -i \
+              -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
+              -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
+              -e "s|\$CPD_PROJECT_NAME|${CPD_PROJECT_NAME}|g" \
+              -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
+              /playbooks/vars/odi-vars.yaml
+
+          # Verification of the odi-vars.yaml file values
+          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Displaying the odi-vars.yaml values"
+          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          cat /playbooks/vars/odi-vars.yaml
+          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          # Logging into OpenShift
+          echo "Logging into OpenShift..."
+          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          oc login --token=$TOKEN
+
+          # Executing Ansible scripts for pre-req and osdu operator installation
+          echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Post Installation Started. Wait for 30 mins"
+          echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+
+          ansible-playbook /playbooks/odi-install/sanity-test.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
+        volumeMounts:
+        - mountPath: /workspace/source/odi-install
+          name: odi-volume
+        workingDir: /workspace/source
+      volumes:
+      - name: odi-volume
+      workspaces:
+      - name: source
+    workspaces:
+    - name: source
+      workspace: source
+  - name: smoke-test
+    params:
+    - name: ansible_image
+      value: $(params.ansible_image)
+    - name: proj_name
+      value: $(params.proj_name)
+    - name: cpd_proj_name
+      value: $(params.cpd_proj_name)
+    - name: partition_admin_password
+      value: $(params.partition_admin_password)
+    - name: router_certs
+      value: $(params.router_certs)
+    retries: 4
+    runAfter:
+    - sanity-test
+    taskSpec:
+      params:
+      - name: proj_name
+        type: string
+      - name: cpd_proj_name
+        type: string
+      - name: router_certs
+        type: string
+      - name: partition_admin_password
+        type: string
+      - name: ansible_image
+        type: string
+      spec: null
+      steps:
+      - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
+        name: run-ansible-playbook
+        script: |
+          #!/bin/bash
+          set -e
+          # Injecting Environment Variables from the pipeline parameters
+          echo "Injecting Environment variables"
+
+          cat <<EOF > /tmp/osdu_vars.sh
+          export PARTITON_PASSWORD="$(params.partition_admin_password)"
+          export PROJECT_NAME="$(params.proj_name)"
+          export CPD_PROJECT_NAME="$(params.cpd_proj_name)"
+          export ROUTER_CERT_NAME="$(params.router_certs)"
+          EOF
+
+          # Sourcing Environmental Variables
+          echo "Sourcing Environmental Variables"
+          chmod +x /tmp/osdu_vars.sh
+          source /tmp/osdu_vars.sh
+
+          # Updating the values of the odi-vars.yaml file with the environmental variables using sed
+          echo "Injecting environment variables into odi-vars.yaml"
+          sed -i \
+              -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
+              -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
+              -e "s|\$CPD_PROJECT_NAME|${CPD_PROJECT_NAME}|g" \
+              -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
+              /playbooks/vars/odi-vars.yaml
+
+          # Verification of the odi-vars.yaml file values
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Displaying the odi-vars.yaml values"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+          cat /playbooks/vars/odi-vars.yaml
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+
+          # Logging into OpenShift
+          echo "Logging into OpenShift..."
+          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+          oc login --token=$TOKEN
+
+          # Executing Ansible scripts for pre-req and osdu operator installation
+          echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Smoke Test Started. Wait for 30 mins"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+
+          ansible-playbook /playbooks/odi-install/smoke-test.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
+        volumeMounts:
+        - mountPath: /workspace/source/odi-install
+          name: odi-volume
+        workingDir: /workspace/source
+      volumes:
+      - name: odi-volume
+      workspaces:
+      - name: source
+    workspaces:
+    - name: source
+      workspace: source
+  workspaces:
+  - name: source

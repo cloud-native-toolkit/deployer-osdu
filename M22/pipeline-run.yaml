@@ -1,0 +1,26 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: osdu-deployer-pipeline-
+  namespace: default
+spec:
+  params:
+  - name: ansible_image
+    value: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone
+  - name: partition_admin_password
+    value: KQb49EqxpuXhNG-f
+  - name: proj_name
+    value: cpd
+  - name: cpd_proj_name
+    value: cpd-operators
+  - name: router_certs
+    value: letsencrypt-certs
+  pipelineRef:
+    name: osdu-ansible-installer-test1
+  taskRunTemplate:
+    serviceAccountName: pipeline
+  timeouts:
+    pipeline: 8h0m0s
+  workspaces:
+  - name: source
+    emptyDir: {}
