@@ -1,6 +1,4 @@
-<<<<<<< HEAD
-# deployer-osdu
-=======
+
 # Installation of OSDU Product on Openshift using Tekton pipelines
 
 This repository consists of Tekton pipelines for the installation of OSDU (Open Sub-surface Data Universe) Product on to Openshift.
@@ -84,7 +82,7 @@ cd <REPO_DIRECTORY>
 
 Creating pipeline in openshift using oc command
 ```
-oc create -f pipelines/osdu-pipeline-embedded-task-deployer.yaml
+oc create -f M22/pipeline.yaml
 ```
 
 3. **Run Pipeline**
@@ -92,7 +90,7 @@ oc create -f pipelines/osdu-pipeline-embedded-task-deployer.yaml
 To run the pipeline, use the below command and replace all the parameters according to the environment.
 
 ```
-oc create -f pipelines/pipelineRun.yaml
+oc create -f M22/pipelineRun.yaml
 ```
 
 
@@ -107,4 +105,3 @@ oc create -f pipelines/pipelineRun.yaml
 | `proj_name`                | `cpd`                                                           | string  | Project name in OpenShift.                    |
 | `cpd_proj_name`            | `cpd-operators`                                                 | string  | CPD project name in OpenShift.                |
 | `router_certs`             | `letsencrypt-certs`                                             | string  | Name of the router certificate.               |
->>>>>>> master
