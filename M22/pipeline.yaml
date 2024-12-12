@@ -67,6 +67,7 @@ spec:
     - name: router_certs
       value: $(params.router_certs)
     retries: 4
+    timeout: "0h2m30s"
     runAfter:
     - import-image-to-registry
     taskSpec:
@@ -156,6 +157,7 @@ spec:
     - name: router_certs
       value: $(params.router_certs)
     retries: 4
+    timeout: "0h2m30s"
     runAfter:
     - run-ansible-playbook
     taskSpec:
@@ -240,6 +242,7 @@ spec:
     - name: router_certs
       value: $(params.router_certs)
     retries: 4
+    timeout: "0h2m30s"
     runAfter:
     - post-install
     taskSpec:
@@ -327,6 +330,7 @@ spec:
     - name: router_certs
       value: $(params.router_certs)
     retries: 4
+    timeout: "0h2m30s"
     runAfter:
     - sanity-test
     taskSpec:
