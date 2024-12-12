@@ -42,8 +42,8 @@ spec:
           set -e
           set -x
           echo "Logging into OpenShift..."
-          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-          oc login --token=$TOKEN
+
+          oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
 
           echo "Checking if ImageStream exists..."
           if ! oc get imagestream ansible-installer -n default &>/dev/null; then
@@ -67,7 +67,6 @@ spec:
     - name: router_certs
       value: $(params.router_certs)
     retries: 4
-    timeout: "0h2m30s"
     runAfter:
     - import-image-to-registry
     taskSpec:
@@ -124,8 +123,7 @@ spec:
           # Logging into OpenShift
           echo "Logging into OpenShift..."
 
-          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-          oc login --token=$TOKEN
+          oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
 
 
           # Executing Ansible scripts for pre-req and osdu operator installation
@@ -157,7 +155,6 @@ spec:
     - name: router_certs
       value: $(params.router_certs)
     retries: 4
-    timeout: "0h2m30s"
     runAfter:
     - run-ansible-playbook
     taskSpec:
@@ -209,8 +206,7 @@ spec:
           echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
           # Logging into OpenShift
           echo "Logging into OpenShift..."
-          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-          oc login --token=$TOKEN
+          oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
 
           # Executing Ansible scripts for pre-req and osdu operator installation
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
@@ -242,7 +238,6 @@ spec:
     - name: router_certs
       value: $(params.router_certs)
     retries: 4
-    timeout: "0h2m30s"
     runAfter:
     - post-install
     taskSpec:
@@ -297,8 +292,7 @@ spec:
           echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
           # Logging into OpenShift
           echo "Logging into OpenShift..."
-          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-          oc login --token=$TOKEN
+          oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
 
           # Executing Ansible scripts for pre-req and osdu operator installation
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
@@ -330,7 +324,6 @@ spec:
     - name: router_certs
       value: $(params.router_certs)
     retries: 4
-    timeout: "0h2m30s"
     runAfter:
     - sanity-test
     taskSpec:
@@ -385,8 +378,7 @@ spec:
 
           # Logging into OpenShift
           echo "Logging into OpenShift..."
-          TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-          oc login --token=$TOKEN
+          oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
 
           # Executing Ansible scripts for pre-req and osdu operator installation
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
