@@ -213,7 +213,7 @@ spec:
           echo "Post Installation Started. Wait for 30 mins"
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
 
-          ansible-playbook /playbooks/odi-install/post-install.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
+          ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/post-install.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
         volumeMounts:
         - mountPath: /workspace/source/odi-install
           name: odi-volume
@@ -299,7 +299,7 @@ spec:
           echo "Post Installation Started. Wait for 30 mins"
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
 
-          ansible-playbook /playbooks/odi-install/sanity-test.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
+          ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/sanity-test.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
         volumeMounts:
         - mountPath: /workspace/source/odi-install
           name: odi-volume
@@ -385,7 +385,7 @@ spec:
           echo "Smoke Test Started. Wait for 30 mins"
           echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
 
-          ansible-playbook /playbooks/odi-install/smoke-test.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
+          ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/smoke-test.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
         volumeMounts:
         - mountPath: /workspace/source/odi-install
           name: odi-volume
