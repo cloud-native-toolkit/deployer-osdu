@@ -16,7 +16,7 @@ spec:
   - name: router_certs
     value: letsencrypt-certs
   pipelineRef:
-    name: osdu-ansible-installer-test1
+    name: osdu-ansible-installer
   taskRunTemplate:
     serviceAccountName: pipeline
   timeouts:
