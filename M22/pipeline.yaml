@@ -1,11 +1,21 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: osdu-ansible-installer
+  name: osdu-deployer
   namespace: default
 spec:
   params:
-  - name: access_key_id
+  - name: namespace
+    type: string
+    default: default
+  - name: cpd-pipeline-name
+    type: string
+    default: cloud-pak-deployer-5.0.x
+  - default: himalay
+    name: access_key_id
+    type: string
+  - default: himalay
+    name: secret_access_key
     type: string
   - default: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone
     name: ansible_image
@@ -23,6 +33,105 @@ spec:
     name: router_certs
     type: string
   tasks:
+  - name: wait-for-cpd-pipeline
+    params:
+    - name: cpd-pipeline-name
+      value: $(params.cpd-pipeline-name)
+    - name: namespace
+      value: $(params.namespace)
+    taskSpec:
+      params:
+      - name: cpd-pipeline-name
+        type: string
+      - name: namespace
+        type: string
+      steps:
+      - image: registry.access.redhat.com/ubi9/ubi:latest
+        name: wait-and-check
+        script: |
+          #!/bin/bash
+          set -e
+          set -x
+
+          # Install oc CLI
+          dnf install -y wget
+          wget https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.16.0/openshift-client-linux-4.16.0.tar.gz
+          tar -xvzf openshift-client-linux-4.16.0.tar.gz -C /usr/local/bin/
+          
+          # Login to the OpenShift cluster
+          oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT --insecure-skip-tls-verify
+          
+          CPD_PIPELINE_NAME=$(params.cpd-pipeline-name)
+          CPD_NAMESPACE=$(params.namespace)
+
+          # Check if the pipeline exists
+          if ! oc get pipeline $CPD_PIPELINE_NAME -n $CPD_NAMESPACE; then
+            echo "Pipeline $CPD_PIPELINE_NAME not found. Creating it..."
+            oc create -f https://raw.githubusercontent.com/cloud-native-toolkit/deployer-cloud-pak-deployer/refs/heads/main/cp4d/5.0.x/cp4d-cloud-pak-deployer-pipeline.yaml -n $CPD_NAMESPACE
+          fi
+
+          # Check for an existing PipelineRun
+          PIPELINERUN=$(oc get pipelinerun -n $CPD_NAMESPACE -l tekton.dev/pipeline=$CPD_PIPELINE_NAME -o jsonpath='{.items[0].metadata.name}' || true)
+
+          if [ -z "$PIPELINERUN" ]; then
+            echo "No existing PipelineRun found for pipeline $CPD_PIPELINE_NAME. Creating a new one..."
+            oc create -f https://github.com/cloud-native-toolkit/deployer-cloud-pak-deployer/blob/main/cp4d/5.0.x/cp4d-cloud-pak-deployer-pipeline-run.yaml -n $CPD_NAMESPACE
+            PIPELINERUN=$(oc get pipelinerun -n $CPD_NAMESPACE -l tekton.dev/pipeline=$CPD_PIPELINE_NAME -o jsonpath='{.items[0].metadata.name}')
+          fi
+
+          # Wait for the PipelineRun to complete
+          MAX_WAIT_TIME=$((3 * 60 * 60))  # 3 hours in seconds
+          CHECK_INTERVAL=60  # 1 minute in seconds
+          ELAPSED_TIME=0
+
+          echo "Waiting for PipelineRun $PIPELINERUN to complete in namespace $CPD_NAMESPACE..."
+
+          while [ $ELAPSED_TIME -lt $MAX_WAIT_TIME ]; do
+            STATUS=$(oc get pipelinerun $PIPELINERUN -n $CPD_NAMESPACE -o jsonpath='{.status.conditions[0].reason}')
+            echo "Current Status: $STATUS"
+
+            if [ "$STATUS" == "Completed" ]; then
+              echo "PipelineRun $PIPELINERUN has completed successfully."
+              exit 0
+            elif [ "$STATUS" == "Failed" ]; then
+              echo "PipelineRun $PIPELINERUN has failed. Exiting."
+              exit 1
+            fi
+
+            echo "PipelineRun not yet completed. Waiting for $CHECK_INTERVAL seconds..."
+            sleep $CHECK_INTERVAL
+            ELAPSED_TIME=$((ELAPSED_TIME + CHECK_INTERVAL))
+          done
+
+          echo "Timeout reached: PipelineRun $PIPELINERUN did not complete within the maximum wait time."
+          exit 1
+  - name: update-pull-secret
+    params:
+    - name: access_key_id
+      value: $(params.access_key_id)
+    - name: secret_access_key
+      value: $(params.secret_access_key)
+    taskSpec:
+      params:
+      - name: secret_access_key
+        type: string
+      - name: access_key_id
+        type: string
+      spec: null
+      steps:
+      - image: public.ecr.aws/o6l8m9v3/openshift-client-image:latest
+        name: update-pull-secret
+        script: |
+          #!/bin/bash
+          set -e
+          set -x
+          echo "Logging Into Openshift"
+          oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
+          export AWS_ACCESS_KEY_ID="$(params.access_key_id)"
+          export AWS_SECRET_ACCESS_KEY="$(params.secret_access_key)"
+          export AWS_DEFAULT_REGION="us-east-1"
+          echo "Updating Pull Secret"
+          ./pull-secret-update-latest.sh
   - name: import-image-to-registry
     params:
     - name: ansible_image
@@ -31,6 +140,8 @@ spec:
       value: $(params.proj_name)
     - name: access_key_id
       value: $(params.access_key_id)
+    runAfter:
+    - update-pull-secret
     taskSpec:
       params:
       - name: ansible_image
@@ -48,7 +159,7 @@ spec:
           set -e
           set -x
           echo "Displaying Access Key ID"
-          echo "$(params.access_key_id)
+          echo "$(params.access_key_id)"
           echo "Logging into OpenShift..."
 
           oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
