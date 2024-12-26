@@ -5,6 +5,8 @@ metadata:
   namespace: default
 spec:
   params:
+  - name: access_key_id
+    type: string
   - default: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone
     name: ansible_image
     type: string
@@ -27,11 +29,15 @@ spec:
       value: $(params.ansible_image)
     - name: proj_name
       value: $(params.proj_name)
+    - name: access_key_id
+      value: $(params.access_key_id)
     taskSpec:
       params:
       - name: ansible_image
         type: string
       - name: proj_name
+        type: string
+      - name: access_key_id
         type: string
       spec: null
       steps:
@@ -41,6 +47,8 @@ spec:
           #!/bin/bash
           set -e
           set -x
+          echo "Displaying Access Key ID"
+          echo "$(params.access_key_id)
           echo "Logging into OpenShift..."
 
           oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
