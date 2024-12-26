@@ -33,3 +33,4 @@ spec:
     pipeline: 8h0m0s
   workspaces:
   - name: source
+    emptyDir: {}
