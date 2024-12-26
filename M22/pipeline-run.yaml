@@ -1,10 +1,23 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  generateName: osdu-deployer-pipeline-
+  annotations:
+    chains.tekton.dev/signed: "true"
+    pipeline.openshift.io/started-by: kube:admin
+  labels:
+    tekton.dev/pipeline: osdu-deployer
+  name: osdu-deployer-lbpjba
   namespace: default
 spec:
   params:
+  - name: namespace
+    value: default
+  - name: cpd-pipeline-name
+    value: cloud-pak-deployer-5.0.x
+  - name: access_key_id
+    value: himalay
+  - name: secret_access_key
+    value: himalay
   - name: ansible_image
     value: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone
   - name: partition_admin_password
@@ -16,11 +29,10 @@ spec:
   - name: router_certs
     value: letsencrypt-certs
   pipelineRef:
-    name: osdu-ansible-installer
+    name: osdu-deployer
   taskRunTemplate:
     serviceAccountName: pipeline
   timeouts:
     pipeline: 8h0m0s
   workspaces:
   - name: source
-    emptyDir: {}
