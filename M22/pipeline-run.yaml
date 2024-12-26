@@ -1,9 +1,6 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  annotations:
-    chains.tekton.dev/signed: "true"
-    pipeline.openshift.io/started-by: kube:admin
   labels:
     tekton.dev/pipeline: osdu-deployer
   name: osdu-deployer-lbpjba
