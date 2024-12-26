@@ -3,7 +3,7 @@ kind: PipelineRun
 metadata:
   labels:
     tekton.dev/pipeline: osdu-deployer
-  name: osdu-deployer-lbpjba
+  generateName: osdu-deployer
   namespace: default
 spec:
   params:
