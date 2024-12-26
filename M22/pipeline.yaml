@@ -71,11 +71,11 @@ spec:
           fi
 
           # Check for an existing PipelineRun
-          PIPELINERUN=$(oc get pipelinerun -n $CPD_NAMESPACE -l tekton.dev/pipeline=$CPD_PIPELINE_NAME -o jsonpath='{.items[0].metadata.name}' || true)
+          PIPELINERUN=$(oc get pipelinerun -n $CPD_NAMESPACE -l tekton.dev/pipeline=$CPD_PIPELINE_NAME -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 
           if [ -z "$PIPELINERUN" ]; then
             echo "No existing PipelineRun found for pipeline $CPD_PIPELINE_NAME. Creating a new one..."
-            oc create -f https://github.com/cloud-native-toolkit/deployer-cloud-pak-deployer/blob/main/cp4d/5.0.x/cp4d-cloud-pak-deployer-pipeline-run.yaml -n $CPD_NAMESPACE
+            oc create -f https://raw.githubusercontent.com/cloud-native-toolkit/deployer-cloud-pak-deployer/refs/heads/main/cp4d/5.0.x/cp4d-cloud-pak-deployer-pipeline-run.yaml -n $CPD_NAMESPACE
             PIPELINERUN=$(oc get pipelinerun -n $CPD_NAMESPACE -l tekton.dev/pipeline=$CPD_PIPELINE_NAME -o jsonpath='{.items[0].metadata.name}')
           fi
 
@@ -132,6 +132,7 @@ spec:
           export AWS_DEFAULT_REGION="us-east-1"
           echo "Updating Pull Secret"
           ./pull-secret-update-latest.sh
+          sleep 120
   - name: import-image-to-registry
     params:
     - name: ansible_image
@@ -142,6 +143,7 @@ spec:
       value: $(params.access_key_id)
     runAfter:
     - update-pull-secret
+    retries: 4
     taskSpec:
       params:
       - name: ansible_image
