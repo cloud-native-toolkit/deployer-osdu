@@ -47,7 +47,7 @@ spec:
         type: string
       steps:
       - image: registry.access.redhat.com/ubi9/ubi:latest
-        name: wait-and-check
+        name: wait-for-cpd-pipeline
         script: |
           #!/bin/bash
           set -e
@@ -106,6 +106,8 @@ spec:
           echo "Timeout reached: PipelineRun $PIPELINERUN did not complete within the maximum wait time."
           exit 1
   - name: update-pull-secret
+    runAfter:
+    - wait-for-cpd-pipeline
     params:
     - name: access_key_id
       value: $(params.access_key_id)
