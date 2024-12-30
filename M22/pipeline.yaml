@@ -107,8 +107,6 @@ spec:
           echo "Timeout reached: PipelineRun $PIPELINERUN did not complete within the maximum wait time."
           exit 1
   - name: update-pull-secret
-    runAfter:
-    - wait-for-cpd-pipeline
     params:
     - name: access_key_id
       value: $(params.access_key_id)
@@ -146,6 +144,7 @@ spec:
       value: $(params.access_key_id)
     runAfter:
     - update-pull-secret
+    - wait-for-cpd-pipeline
     retries: 4
     taskSpec:
       params:
@@ -157,7 +156,7 @@ spec:
         type: string
       spec: null
       steps:
-      - image: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone
+      - image: public.ecr.aws/o6l8m9v3/openshift-client-image:latest
         name: import-image
         script: |
           #!/bin/bash
