@@ -10,7 +10,7 @@ spec:
   - name: namespace
     value: default
   - name: cpd-pipeline-name
-    value: cloud-pak-deployer-5.0.x
+    value: cloud-pak-deployer-4.8.x
   - name: access_key_id
     value: himalay
   - name: secret_access_key
