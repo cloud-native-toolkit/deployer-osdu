@@ -67,7 +67,7 @@ spec:
           # Check if the pipeline exists
           if ! oc get pipeline $CPD_PIPELINE_NAME -n $CPD_NAMESPACE; then
             echo "Pipeline $CPD_PIPELINE_NAME not found. Creating it..."
-            oc create -f https://raw.githubusercontent.com/cloud-native-toolkit/deployer-cloud-pak-deployer/refs/heads/main/cp4d/5.0.x/cp4d-cloud-pak-deployer-pipeline.yaml -n $CPD_NAMESPACE
+            oc create -f https://raw.githubusercontent.com/cloud-native-toolkit/deployer-cloud-pak-deployer/refs/heads/main/cp4d/4.8.x/cp4d-cloud-pak-deployer-pipeline.yaml -n $CPD_NAMESPACE
           fi
 
           # Check for an existing PipelineRun
@@ -75,7 +75,7 @@ spec:
 
           if [ -z "$PIPELINERUN" ]; then
             echo "No existing PipelineRun found for pipeline $CPD_PIPELINE_NAME. Creating a new one..."
-            oc create -f https://raw.githubusercontent.com/cloud-native-toolkit/deployer-cloud-pak-deployer/refs/heads/main/cp4d/5.0.x/cp4d-cloud-pak-deployer-pipeline-run.yaml -n $CPD_NAMESPACE
+            oc create -f https://raw.githubusercontent.com/cloud-native-toolkit/deployer-cloud-pak-deployer/refs/heads/main/cp4d/4.8.x/cp4d-cloud-pak-deployer-pipeline-run.yaml -n $CPD_NAMESPACE
             sleep 60
             PIPELINERUN=$(oc get pipelinerun -n $CPD_NAMESPACE -l tekton.dev/pipeline=$CPD_PIPELINE_NAME -o jsonpath='{.items[0].metadata.name}')
           fi
