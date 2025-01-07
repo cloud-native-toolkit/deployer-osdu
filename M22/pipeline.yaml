@@ -81,7 +81,7 @@ spec:
           fi
 
           # Wait for the PipelineRun to complete
-          MAX_WAIT_TIME=$((3 * 60 * 60))  # 3 hours in seconds
+          MAX_WAIT_TIME=$((6 * 60 * 60))  # 3 hours in seconds
           CHECK_INTERVAL=60  # 1 minute in seconds
           ELAPSED_TIME=0
 
