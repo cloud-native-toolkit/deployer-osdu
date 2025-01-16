@@ -17,7 +17,7 @@ spec:
   - default: himalay
     name: secret_access_key
     type: string
-  - default: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone-updated
+  - default: example
     name: ansible_image
     type: string
   - default: KQb49EqxpuXhNG-f
