@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: osdu-deployer
+  name: osdu-deployer-with-tno-dataload
   namespace: default
 spec:
   params:
@@ -17,7 +17,7 @@ spec:
   - default: himalay
     name: secret_access_key
     type: string
-  - default: example
+  - default: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone-updated
     name: ansible_image
     type: string
   - default: KQb49EqxpuXhNG-f
@@ -520,5 +520,35 @@ spec:
     workspaces:
     - name: source
       workspace: source
+  - name: tno-dataloading
+    params:
+    - name: namespace
+      value: $(params.proj_name)
+    runAfter:
+    - smoke-test
+    taskSpec:
+      params:
+      - name: namespace
+        type: string
+      steps:
+      - image: 849574731431.dkr.ecr.us-east-1.amazonaws.com/tno-dataload:techzone
+        name: tno-dataload
+        script: |
+          #!/bin/bash
+          oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT --insecure-skip-tls-verify 
+          oc adm policy add-cluster-role-to-user cluster-admin -z pipeline -n $(params.namespace)
+          ./create-tno-dataload-configmap.sh
+          sleep 30    
+          oc create sa dataload-update -n $(params.namespace)
+          sleep 30
+          
+          oc create -f tno-dataload-task.yaml -n $(params.namespace)
+           
+          
+          sleep 60
+          
+          oc create -f tno-dataload-task-run.yaml -n $(params.namespace)
+          
+          
   workspaces:
   - name: source
