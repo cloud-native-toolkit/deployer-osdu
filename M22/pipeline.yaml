@@ -32,6 +32,9 @@ spec:
   - default: letsencrypt-certs
     name: router_certs
     type: string
+  - default: true
+    type: string
+    name: tno_data
   tasks:
   - name: wait-for-cpd-pipeline
     params:
@@ -521,6 +524,10 @@ spec:
     - name: source
       workspace: source
   - name: tno-dataloading
+    when:
+    - input: $(params.tno_data)
+      operator: in
+      values: ["true"]
     params:
     - name: namespace
       value: $(params.proj_name)
@@ -541,14 +548,8 @@ spec:
           sleep 30    
           oc create sa dataload-update -n $(params.namespace)
           sleep 30
-          
           oc create -f tno-dataload-task.yaml -n $(params.namespace)
-           
-          
           sleep 60
-          
-          oc create -f tno-dataload-task-run.yaml -n $(params.namespace)
-          
-          
+          oc create -f tno-dataload-task-run.yaml -n $(params.namespace)   
   workspaces:
   - name: source
