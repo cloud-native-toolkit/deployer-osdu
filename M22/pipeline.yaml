@@ -5,12 +5,12 @@ metadata:
   namespace: default
 spec:
   params:
-  - name: namespace
+  - default: default
+    name: namespace
     type: string
-    default: default
-  - name: cpd-pipeline-name
+  - default: cloud-pak-deployer-5.0.x
+    name: cpd-pipeline-name
     type: string
-    default: cloud-pak-deployer-5.0.x
   - default: himalay
     name: access_key_id
     type: string
@@ -32,9 +32,15 @@ spec:
   - default: letsencrypt-certs
     name: router_certs
     type: string
-  - default: true
-    type: string
+  - default: "false"
     name: tno_data
+    type: string
+  - name: block_storage
+    type: string
+    default: ocs-storagecluster-ceph-rbd
+  - name: file_storage
+    type: string
+    default: ocs-storagecluster-cephfs
   tasks:
   - name: wait-for-cpd-pipeline
     params:
@@ -48,6 +54,7 @@ spec:
         type: string
       - name: namespace
         type: string
+      spec: null
       steps:
       - image: registry.access.redhat.com/ubi9/ubi:latest
         name: wait-for-cpd-pipeline
@@ -60,10 +67,10 @@ spec:
           dnf install -y wget
           wget https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.16.0/openshift-client-linux-4.16.0.tar.gz
           tar -xvzf openshift-client-linux-4.16.0.tar.gz -C /usr/local/bin/
-          
+
           # Login to the OpenShift cluster
           oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT --insecure-skip-tls-verify
-          
+
           CPD_PIPELINE_NAME=$(params.cpd-pipeline-name)
           CPD_NAMESPACE=$(params.namespace)
 
@@ -145,10 +152,10 @@ spec:
       value: $(params.proj_name)
     - name: access_key_id
       value: $(params.access_key_id)
+    retries: 4
     runAfter:
     - update-pull-secret
     - wait-for-cpd-pipeline
-    retries: 4
     taskSpec:
       params:
       - name: ansible_image
@@ -192,7 +199,10 @@ spec:
       value: $(params.partition_admin_password)
     - name: router_certs
       value: $(params.router_certs)
-    retries: 4
+    - name: file_storage
+      value: $(params.file_storage)
+    - name: block_storage
+      value: $(params.block_storage)
     runAfter:
     - import-image-to-registry
     taskSpec:
@@ -206,6 +216,10 @@ spec:
       - name: partition_admin_password
         type: string
       - name: ansible_image
+        type: string
+      - name: block_storage
+        type: string
+      - name: file_storage
         type: string
       spec: null
       steps:
@@ -223,6 +237,8 @@ spec:
           export PROJECT_NAME="$(params.proj_name)"
           export CPD_PROJECT_NAME="$(params.cpd_proj_name)"
           export ROUTER_CERT_NAME="$(params.router_certs)"
+          export BLOCK_STORAGE="$(params.block_storage)"
+          export FILE_STORAGE="$(params.file_storage)"
           EOF
 
           # Sourcing Environmental Variables
@@ -237,6 +253,8 @@ spec:
               -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
               -e "s|\$CPD_PROJECT_NAME|${CPD_PROJECT_NAME}|g" \
               -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
+              -e "s|\$BLOCK_STORAGE|${BLOCK_STORAGE}|g" \
+              -e "s|\$FILE_STORAGE|${FILE_STORAGE}|g" \
               /playbooks/vars/odi-vars.yaml
 
           # Verification of the odi-vars.yaml file values
@@ -280,6 +298,10 @@ spec:
       value: $(params.partition_admin_password)
     - name: router_certs
       value: $(params.router_certs)
+    - name: file_storage
+      value: $(params.file_storage)
+    - name: block_storage
+      value: $(params.block_storage)
     retries: 4
     runAfter:
     - run-ansible-playbook
@@ -293,12 +315,17 @@ spec:
         type: string
       - name: partition_admin_password
         type: string
+      - name: block_storage
+        type: string
+      - name: file_storage
+        type: string
       spec: null
       steps:
       - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
         name: post-install
         script: |
           #!/bin/bash
+
           set -e
           # Injecting Environment Variables from the pipeline parameters
           echo "Injecting Environment variables"
@@ -308,6 +335,8 @@ spec:
           export PROJECT_NAME="$(params.proj_name)"
           export CPD_PROJECT_NAME="$(params.cpd_proj_name)"
           export ROUTER_CERT_NAME="$(params.router_certs)"
+          export BLOCK_STORAGE="$(params.block_storage)"
+          export FILE_STORAGE="$(params.file_storage)"
           EOF
 
           # Sourcing Environmental Variables
@@ -317,12 +346,18 @@ spec:
 
           # Updating the values of the odi-vars.yaml file with the environmental variables using sed
           echo "Injecting environment variables into odi-vars.yaml"
+
+
+
           sed -i \
               -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
               -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
               -e "s|\$CPD_PROJECT_NAME|${CPD_PROJECT_NAME}|g" \
               -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
+              -e "s|\$BLOCK_STORAGE|${BLOCK_STORAGE}|g" \
+              -e "s|\$FILE_STORAGE|${FILE_STORAGE}|g" \
               /playbooks/vars/odi-vars.yaml
+
 
           # Verification of the odi-vars.yaml file values
           echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
@@ -340,6 +375,7 @@ spec:
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
 
           ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/post-install.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
+
         volumeMounts:
         - mountPath: /workspace/source/odi-install
           name: odi-volume
@@ -363,6 +399,10 @@ spec:
       value: $(params.partition_admin_password)
     - name: router_certs
       value: $(params.router_certs)
+    - name: file_storage
+      value: $(params.file_storage)
+    - name: block_storage
+      value: $(params.block_storage)
     retries: 4
     runAfter:
     - post-install
@@ -377,6 +417,10 @@ spec:
       - name: partition_admin_password
         type: string
       - name: ansible_image
+        type: string
+      - name: block_storage
+        type: string
+      - name: file_storage
         type: string
       spec: null
       steps:
@@ -394,6 +438,8 @@ spec:
           export PROJECT_NAME="$(params.proj_name)"
           export CPD_PROJECT_NAME="$(params.cpd_proj_name)"
           export ROUTER_CERT_NAME="$(params.router_certs)"
+          export BLOCK_STORAGE="$(params.block_storage)"
+          export FILE_STORAGE="$(params.file_storage)"
           EOF
 
           # Sourcing Environmental Variables
@@ -403,12 +449,18 @@ spec:
 
           # Updating the values of the odi-vars.yaml file with the environmental variables using sed
           echo "Injecting environment variables into odi-vars.yaml"
+
+
+
           sed -i \
               -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
               -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
               -e "s|\$CPD_PROJECT_NAME|${CPD_PROJECT_NAME}|g" \
               -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
+              -e "s|\$BLOCK_STORAGE|${BLOCK_STORAGE}|g" \
+              -e "s|\$FILE_STORAGE|${FILE_STORAGE}|g" \
               /playbooks/vars/odi-vars.yaml
+
 
           # Verification of the odi-vars.yaml file values
           echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
@@ -449,6 +501,10 @@ spec:
       value: $(params.partition_admin_password)
     - name: router_certs
       value: $(params.router_certs)
+    - name: file_storage
+      value: $(params.file_storage)
+    - name: block_storage
+      value: $(params.block_storage)
     retries: 4
     runAfter:
     - sanity-test
@@ -463,6 +519,10 @@ spec:
       - name: partition_admin_password
         type: string
       - name: ansible_image
+        type: string
+      - name: block_storage
+        type: string
+      - name: file_storage
         type: string
       spec: null
       steps:
@@ -479,6 +539,8 @@ spec:
           export PROJECT_NAME="$(params.proj_name)"
           export CPD_PROJECT_NAME="$(params.cpd_proj_name)"
           export ROUTER_CERT_NAME="$(params.router_certs)"
+          export BLOCK_STORAGE="$(params.block_storage)"
+          export FILE_STORAGE="$(params.file_storage)"
           EOF
 
           # Sourcing Environmental Variables
@@ -488,11 +550,15 @@ spec:
 
           # Updating the values of the odi-vars.yaml file with the environmental variables using sed
           echo "Injecting environment variables into odi-vars.yaml"
+
+
           sed -i \
               -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
               -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
               -e "s|\$CPD_PROJECT_NAME|${CPD_PROJECT_NAME}|g" \
               -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
+              -e "s|\$BLOCK_STORAGE|${BLOCK_STORAGE}|g" \
+              -e "s|\$FILE_STORAGE|${FILE_STORAGE}|g" \
               /playbooks/vars/odi-vars.yaml
 
           # Verification of the odi-vars.yaml file values
@@ -524,10 +590,6 @@ spec:
     - name: source
       workspace: source
   - name: tno-dataloading
-    when:
-    - input: $(params.tno_data)
-      operator: in
-      values: ["true"]
     params:
     - name: namespace
       value: $(params.proj_name)
@@ -537,6 +599,7 @@ spec:
       params:
       - name: namespace
         type: string
+      spec: null
       steps:
       - image: 849574731431.dkr.ecr.us-east-1.amazonaws.com/tno-dataload:techzone
         name: tno-dataload
@@ -551,5 +614,11 @@ spec:
           oc create -f tno-dataload-task.yaml -n $(params.namespace)
           sleep 60
           oc create -f tno-dataload-task-run.yaml -n $(params.namespace)   
+
+    when:
+    - input: $(params.tno_data)
+      operator: in
+      values:
+      - "true"
   workspaces:
   - name: source
