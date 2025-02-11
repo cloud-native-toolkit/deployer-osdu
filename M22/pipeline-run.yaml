@@ -30,9 +30,9 @@ spec:
   - name: file_storage
     value: ocs-storagecluster-cephfs
   - name: prereq_version
-    value: "256"
-  - name: osdu_version
     value: "198"
+  - name: osdu_version
+    value: "279"
   - name: cpd_required
     value: "true"
   pipelineRef:
