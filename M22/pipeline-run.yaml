@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  generateName: osdu-deployer-generic-test-za9gko
+  generateName: osdu-deployer-
   namespace: default
 spec:
   params:
