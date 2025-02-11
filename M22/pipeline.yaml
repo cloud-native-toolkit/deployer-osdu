@@ -17,7 +17,7 @@ spec:
   - default: himalay
     name: secret_access_key
     type: string
-  - default: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone-updated
+  - default: 849574731431.dkr.ecr.us-east-1.amazonaws.com/ansible-installer:techzone-generic
     name: ansible_image
     type: string
   - default: KQb49EqxpuXhNG-f
@@ -41,8 +41,22 @@ spec:
   - name: file_storage
     type: string
     default: ocs-storagecluster-cephfs
+  - name: prereq_version
+    type: string
+    default: 256
+  - name: osdu_version
+    type: string
+    default: 198
+  - name: cpd_required
+    type: string
+    default: false
   tasks:
   - name: wait-for-cpd-pipeline
+    when:
+    - input: $(params.cpd_required)
+      operator: in
+      values:
+      - "true"
     params:
     - name: cpd-pipeline-name
       value: $(params.cpd-pipeline-name)
@@ -185,9 +199,10 @@ spec:
             echo "Importing the image into the OpenShift registry..."
             oc tag --source=docker "$(params.ansible_image)" default/ansible-installer:latest
           else
+            oc tag --source=docker "$(params.ansible_image)" default/ansible-installer:latest
             echo "ImageStream already exists."
           fi
-  - name: run-ansible-playbook
+  - name: osdu-installation
     params:
     - name: ansible_image
       value: $(params.ansible_image)
@@ -203,6 +218,10 @@ spec:
       value: $(params.file_storage)
     - name: block_storage
       value: $(params.block_storage)
+    - name: prereq_version
+      value: $(params.prereq_version)
+    - name: osdu_version
+      value: $(params.osdu_version)
     runAfter:
     - import-image-to-registry
     taskSpec:
@@ -221,10 +240,14 @@ spec:
         type: string
       - name: file_storage
         type: string
+      - name: prereq_version
+        type: string
+      - name: osdu_version
+        type: string
       spec: null
       steps:
       - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
-        name: run-ansible-playbook
+        name: osdu-installation
         script: |
           #!/bin/bash
           set -e
@@ -239,6 +262,8 @@ spec:
           export ROUTER_CERT_NAME="$(params.router_certs)"
           export BLOCK_STORAGE="$(params.block_storage)"
           export FILE_STORAGE="$(params.file_storage)"
+          export PREREQ_VERSION="$(params.prereq_version)"
+          export OSDU_VERSION="$(params.osdu_version)"
           EOF
 
           # Sourcing Environmental Variables
@@ -255,6 +280,8 @@ spec:
               -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
               -e "s|\$BLOCK_STORAGE|${BLOCK_STORAGE}|g" \
               -e "s|\$FILE_STORAGE|${FILE_STORAGE}|g" \
+              -e "s|\$PREREQ_VERSION|${PREREQ_VERSION}|g"\
+              -e "s|\$OSDU_VERSION|${OSDU_VERSION}|g"\
               /playbooks/vars/odi-vars.yaml
 
           # Verification of the odi-vars.yaml file values
@@ -302,9 +329,13 @@ spec:
       value: $(params.file_storage)
     - name: block_storage
       value: $(params.block_storage)
+    - name: prereq_version
+      value: $(params.prereq_version)
+    - name: osdu_version
+      value: $(params.osdu_version)
     retries: 4
     runAfter:
-    - run-ansible-playbook
+    - osdu-installation
     taskSpec:
       params:
       - name: proj_name
@@ -319,14 +350,18 @@ spec:
         type: string
       - name: file_storage
         type: string
+      - name: prereq_version
+        type: string
+      - name: osdu_version
+        type: string
       spec: null
       steps:
       - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
         name: post-install
         script: |
           #!/bin/bash
-
           set -e
+
           # Injecting Environment Variables from the pipeline parameters
           echo "Injecting Environment variables"
 
@@ -337,6 +372,8 @@ spec:
           export ROUTER_CERT_NAME="$(params.router_certs)"
           export BLOCK_STORAGE="$(params.block_storage)"
           export FILE_STORAGE="$(params.file_storage)"
+          export PREREQ_VERSION="$(params.prereq_version)"
+          export OSDU_VERSION="$(params.osdu_version)"
           EOF
 
           # Sourcing Environmental Variables
@@ -346,9 +383,6 @@ spec:
 
           # Updating the values of the odi-vars.yaml file with the environmental variables using sed
           echo "Injecting environment variables into odi-vars.yaml"
-
-
-
           sed -i \
               -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
               -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
@@ -356,26 +390,28 @@ spec:
               -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
               -e "s|\$BLOCK_STORAGE|${BLOCK_STORAGE}|g" \
               -e "s|\$FILE_STORAGE|${FILE_STORAGE}|g" \
+              -e "s|\$PREREQ_VERSION|${PREREQ_VERSION}|g"\
+              -e "s|\$OSDU_VERSION|${OSDU_VERSION}|g"\
               /playbooks/vars/odi-vars.yaml
 
-
           # Verification of the odi-vars.yaml file values
-          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
           echo "Displaying the odi-vars.yaml values"
-          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
           cat /playbooks/vars/odi-vars.yaml
-          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+
           # Logging into OpenShift
           echo "Logging into OpenShift..."
+
           oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
+
 
           # Executing Ansible scripts for pre-req and osdu operator installation
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
-          echo "Post Installation Started. Wait for 30 mins"
+          echo "Installation of pre-req and osdu operators are started. Wait for 30 mins"
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
-
-          ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/post-install.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
-
+          ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/post-install.yml --extra-vars "@/playbooks/vars/odi-vars.yaml"
         volumeMounts:
         - mountPath: /workspace/source/odi-install
           name: odi-volume
@@ -403,6 +439,10 @@ spec:
       value: $(params.file_storage)
     - name: block_storage
       value: $(params.block_storage)
+    - name: prereq_version
+      value: $(params.prereq_version)
+    - name: osdu_version
+      value: $(params.osdu_version)
     retries: 4
     runAfter:
     - post-install
@@ -422,14 +462,18 @@ spec:
         type: string
       - name: file_storage
         type: string
+      - name: prereq_version
+        type: string
+      - name: osdu_version
+        type: string
       spec: null
       steps:
       - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
         name: sanity-test
         script: |
           #!/bin/bash
-
           set -e
+
           # Injecting Environment Variables from the pipeline parameters
           echo "Injecting Environment variables"
 
@@ -440,6 +484,8 @@ spec:
           export ROUTER_CERT_NAME="$(params.router_certs)"
           export BLOCK_STORAGE="$(params.block_storage)"
           export FILE_STORAGE="$(params.file_storage)"
+          export PREREQ_VERSION="$(params.prereq_version)"
+          export OSDU_VERSION="$(params.osdu_version)"
           EOF
 
           # Sourcing Environmental Variables
@@ -449,9 +495,6 @@ spec:
 
           # Updating the values of the odi-vars.yaml file with the environmental variables using sed
           echo "Injecting environment variables into odi-vars.yaml"
-
-
-
           sed -i \
               -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
               -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
@@ -459,23 +502,28 @@ spec:
               -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
               -e "s|\$BLOCK_STORAGE|${BLOCK_STORAGE}|g" \
               -e "s|\$FILE_STORAGE|${FILE_STORAGE}|g" \
+              -e "s|\$PREREQ_VERSION|${PREREQ_VERSION}|g"\
+              -e "s|\$OSDU_VERSION|${OSDU_VERSION}|g"\
               /playbooks/vars/odi-vars.yaml
 
-
           # Verification of the odi-vars.yaml file values
-          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
           echo "Displaying the odi-vars.yaml values"
-          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
           cat /playbooks/vars/odi-vars.yaml
-          echo "------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+
           # Logging into OpenShift
           echo "Logging into OpenShift..."
+
           oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
+
 
           # Executing Ansible scripts for pre-req and osdu operator installation
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
-          echo "Post Installation Started. Wait for 30 mins"
+          echo "Installation of pre-req and osdu operators are started. Wait for 30 mins"
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+          #ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/pre-install.yml --extra-vars "@/playbooks/vars/odi-vars.yaml"
 
           ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/sanity-test.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
         volumeMounts:
@@ -505,6 +553,10 @@ spec:
       value: $(params.file_storage)
     - name: block_storage
       value: $(params.block_storage)
+    - name: prereq_version
+      value: $(params.prereq_version)
+    - name: osdu_version
+      value: $(params.osdu_version)
     retries: 4
     runAfter:
     - sanity-test
@@ -524,6 +576,10 @@ spec:
         type: string
       - name: file_storage
         type: string
+      - name: prereq_version
+        type: string
+      - name: osdu_version
+        type: string
       spec: null
       steps:
       - image: image-registry.openshift-image-registry.svc:5000/default/ansible-installer:latest
@@ -531,6 +587,7 @@ spec:
         script: |
           #!/bin/bash
           set -e
+
           # Injecting Environment Variables from the pipeline parameters
           echo "Injecting Environment variables"
 
@@ -541,6 +598,8 @@ spec:
           export ROUTER_CERT_NAME="$(params.router_certs)"
           export BLOCK_STORAGE="$(params.block_storage)"
           export FILE_STORAGE="$(params.file_storage)"
+          export PREREQ_VERSION="$(params.prereq_version)"
+          export OSDU_VERSION="$(params.osdu_version)"
           EOF
 
           # Sourcing Environmental Variables
@@ -550,8 +609,6 @@ spec:
 
           # Updating the values of the odi-vars.yaml file with the environmental variables using sed
           echo "Injecting environment variables into odi-vars.yaml"
-
-
           sed -i \
               -e "s|\$PARTITON_PASSWORD|${PARTITON_PASSWORD}|g" \
               -e "s|\$PROJECT_NAME|${PROJECT_NAME}|g" \
@@ -559,6 +616,8 @@ spec:
               -e "s|\$ROUTER_CERT_NAME|${ROUTER_CERT_NAME}|g" \
               -e "s|\$BLOCK_STORAGE|${BLOCK_STORAGE}|g" \
               -e "s|\$FILE_STORAGE|${FILE_STORAGE}|g" \
+              -e "s|\$PREREQ_VERSION|${PREREQ_VERSION}|g"\
+              -e "s|\$OSDU_VERSION|${OSDU_VERSION}|g"\
               /playbooks/vars/odi-vars.yaml
 
           # Verification of the odi-vars.yaml file values
@@ -570,12 +629,15 @@ spec:
 
           # Logging into OpenShift
           echo "Logging into OpenShift..."
+
           oc login --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT  --insecure-skip-tls-verify
+
 
           # Executing Ansible scripts for pre-req and osdu operator installation
           echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
-          echo "Smoke Test Started. Wait for 30 mins"
-          echo "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+          echo "Installation of pre-req and osdu operators are started. Wait for 30 mins"
+          echo "---------------------------------------------------------------------------------------------------------------------------------------------------------"
+          #ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/pre-install.yml --extra-vars "@/playbooks/vars/odi-vars.yaml"
 
           ANSIBLE_STDOUT_CALLBACK=yaml ansible-playbook /playbooks/odi-install/smoke-test.yml --extra-vars="@/playbooks/vars/odi-vars.yaml"
         volumeMounts:
@@ -614,7 +676,6 @@ spec:
           oc create -f tno-dataload-task.yaml -n $(params.namespace)
           sleep 60
           oc create -f tno-dataload-task-run.yaml -n $(params.namespace)   
-
     when:
     - input: $(params.tno_data)
       operator: in
